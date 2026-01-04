@@ -1,15 +1,118 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>org.jetbrains.plugins.template</id>
-    <name>IntelliJ Platform Plugin Template</name>
-    <vendor>JetBrains</vendor>
+    <id>com.alibaba.nel.kiwilinter</id>
+    <name>Kiwi-linter</name>
+    <vendor email="chenweichang.cwc@lydaas.com" url="https://gitlab.alibaba-inc.com/nel/kiwi-linter-idea">夜骏</vendor>
+    <description><![CDATA[
+        <h2>Kiwi-linter - I18N Internationalization Plugin for IntelliJ IDEA</h2>
+        <p>A powerful plugin to quickly submit I18N entries to your properties repository.</p>
+        
+        <h3>Features</h3>
+        <ul>
+            <li><b>Auto Extract</b>: Automatically detect ErrorCode enum patterns and extract key-value pairs</li>
+            <li><b>Manual Entry</b>: Manually input key-value pairs for database-stored keys</li>
+            <li><b>Batch Extract</b>: Extract all I18N entries from current file</li>
+            <li><b>One-click Push</b>: Directly commit to remote repository</li>
+        </ul>
+        
+        <h3>Usage</h3>
+        <ul>
+            <li>Right-click menu -> Kiwi-linter -> Extract / Manual Entry</li>
+            <li>Alt+Enter intention menu -> Extract I18N to repository</li>
+            <li>Tools menu -> Kiwi-linter</li>
+        </ul>
+    ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="org.jetbrains.plugins.template.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="org.jetbrains.plugins.template.startup.MyProjectActivity" />
+        <!-- 工具窗口 -->
+        <toolWindow 
+            factoryClass="org.jetbrains.plugins.template.toolWindow.KiwiToolWindowFactory" 
+            id="Kiwi-linter"
+            anchor="right"
+            icon="icons/kiwiLinter.png"/>
+        
+        <!-- 设置页面 -->
+        <projectConfigurable 
+            parentId="tools"
+            instance="org.jetbrains.plugins.template.ui.KiwiSettingsConfigurable"
+            id="org.jetbrains.plugins.template.settings"
+            displayName="Kiwi-linter"/>
+        
+        <!-- Intention Action (灯泡菜单) -->
+        <intentionAction>
+            <className>org.jetbrains.plugins.template.intentions.ExtractI18nIntention</className>
+            <category>Kiwi-linter</category>
+        </intentionAction>
+        
+        <!-- 通知组 -->
+        <notificationGroup id="Kiwi-linter" displayType="BALLOON"/>
+        
+        <!-- 代码标注器 - 高亮显示可提取的 I18N 模式 -->
+        <annotator 
+            language="" 
+            implementationClass="org.jetbrains.plugins.template.annotator.I18nPatternAnnotator"/>
     </extensions>
+
+    <actions>
+        <!-- Kiwi-linter 菜单组 -->
+        <group id="KiwiI18n.MenuGroup" text="Kiwi-linter" description="Kiwi-linter 文案录入" popup="true">
+            
+            <!-- 从选中内容提取 -->
+            <action id="KiwiI18n.ExtractAction"
+                    class="org.jetbrains.plugins.template.actions.ExtractI18nAction"
+                    text="提取 I18N 文案"
+                    description="从选中代码或当前行提取 I18N 文案">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt I"/>
+            </action>
+            
+            <!-- 手动录入（单条） -->
+            <action id="KiwiI18n.ManualEntryAction"
+                    class="org.jetbrains.plugins.template.actions.ManualI18nEntryAction"
+                    text="手动录入 I18N 文案（单条）"
+                    description="手动输入单条 I18N 文案">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift I"/>
+            </action>
+            
+            <!-- 批量手动录入 -->
+            <action id="KiwiI18n.BatchManualEntryAction"
+                    class="org.jetbrains.plugins.template.actions.BatchManualI18nEntryAction"
+                    text="批量手动录入 I18N 文案"
+                    description="批量手动输入多条 I18N 文案，统一提交">
+                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift B"/>
+            </action>
+            
+            <!-- 批量提取 -->
+            <action id="KiwiI18n.BatchExtractAction"
+                    class="org.jetbrains.plugins.template.actions.BatchExtractI18nAction"
+                    text="批量提取文件中的 I18N 文案"
+                    description="从当前文件中批量提取所有 I18N 文案"/>
+            
+            <separator/>
+        </group>
+        
+        <!-- 添加到编辑器右键菜单 -->
+        <group id="KiwiI18n.EditorPopupMenu">
+            <reference ref="KiwiI18n.MenuGroup"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </group>
+        
+        <!-- 添加到 Tools 菜单 -->
+        <group id="KiwiI18n.ToolsMenu">
+            <reference ref="KiwiI18n.MenuGroup"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </group>
+        
+        <!-- 添加到代码生成菜单 (Alt+Insert) -->
+        <group id="KiwiI18n.GenerateMenu">
+            <action id="KiwiI18n.GenerateExtractAction"
+                    class="org.jetbrains.plugins.template.actions.ExtractI18nAction"
+                    text="提取 I18N 文案"/>
+            <add-to-group group-id="GenerateGroup" anchor="last"/>
+        </group>
+    </actions>
 </idea-plugin>
