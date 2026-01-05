@@ -1,0 +1,335 @@
+package com.github.chenweichang1.kiwilinteridea.services
+
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.project.Project
+import com.github.chenweichang1.kiwilinteridea.settings.KiwiSettings
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URI
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+
+/**
+ * Code 平台服务
+ * 使用阿里 Code 平台 API 提交文件更改
+ */
+@Service(Service.Level.PROJECT)
+class CodePlatformService(private val project: Project) {
+    
+    private val logger = thisLogger()
+    
+    /**
+     * 提交结果
+     */
+    data class CommitResult(
+        val added: Int,      // 新增数量
+        val updated: Int,    // 更新数量
+        val skipped: Int,    // 跳过数量（已存在且内容相同）
+        val message: String
+    )
+    
+    /**
+     * 提交文件更改到仓库
+     */
+    fun commitFile(
+        repoPath: String,
+        branch: String,
+        filePath: String,
+        content: String,
+        commitMessage: String,
+        append: Boolean = true
+    ): Result<String> {
+        val settings = KiwiSettings.getInstance(project)
+        
+        logger.info("开始提交文件到 Code 平台")
+        logger.info("仓库: $repoPath, 分支: $branch, 文件: $filePath")
+        
+        return commitViaApi(branch, filePath, content, commitMessage)
+    }
+    
+    /**
+     * 使用阿里 Code 平台 API 提交
+     * 支持去重和更新：相同 key 且值相同则跳过，值不同则替换
+     */
+    private fun commitViaApi(
+        branch: String,
+        filePath: String,
+        content: String,
+        commitMessage: String
+    ): Result<String> {
+        return try {
+            val settings = KiwiSettings.getInstance(project)
+            val token = settings.state.privateToken
+            
+            if (token.isBlank()) {
+                return Result.failure(Exception("请在设置中配置 Private Token"))
+            }
+            
+            // 阿里 Code 平台 API（使用 HTTPS）
+            val baseApiUrl = "https://code.alibaba-inc.com/api/v3"
+            
+            // 使用项目 ID（必须配置）
+            val projectId = settings.state.projectId
+            if (projectId.isBlank()) {
+                return Result.failure(Exception("请在设置中配置项目 ID"))
+            }
+            
+            val encodedPath = java.net.URLEncoder.encode(filePath, "UTF-8")
+            
+            logger.info("使用阿里 Code API 提交")
+            logger.info("项目 ID: $projectId, 分支: $branch, 文件: $filePath")
+            
+            // 1. 获取现有文件内容
+            val existingContent = getFileContentViaApi(baseApiUrl, projectId, branch, encodedPath, token) ?: ""
+            val isCreate = existingContent.isEmpty()
+            
+            // 2. 解析现有内容为 Map（key -> value）
+            val existingEntries = parsePropertiesContent(existingContent)
+            
+            // 3. 解析新提交的内容
+            val newEntries = parsePropertiesContent(content)
+            
+            // 4. 合并：检查重复、更新或新增
+            var added = 0
+            var updated = 0
+            var skipped = 0
+            
+            val resultEntries = existingEntries.toMutableMap()
+            
+            for ((key, value) in newEntries) {
+                when {
+                    // key 不存在 → 新增
+                    !resultEntries.containsKey(key) -> {
+                        resultEntries[key] = value
+                        added++
+                        logger.info("新增: $key")
+                    }
+                    // key 存在但值不同 → 更新
+                    resultEntries[key] != value -> {
+                        resultEntries[key] = value
+                        updated++
+                        logger.info("更新: $key (旧值: ${resultEntries[key]}, 新值: $value)")
+                    }
+                    // key 存在且值相同 → 跳过
+                    else -> {
+                        skipped++
+                        logger.info("跳过（已存在且内容相同）: $key")
+                    }
+                }
+            }
+            
+            // 如果没有任何变更，直接返回成功
+            if (added == 0 && updated == 0) {
+                return Result.success("没有需要提交的变更（${skipped}条文案已存在且内容相同）")
+            }
+            
+            // 5. 重建文件内容（保持原有顺序，只更新本次提交的 key，新增的追加到末尾）
+            val submittedKeys = newEntries.keys  // 本次提交的 key 集合
+            val finalContent = rebuildPropertiesContent(existingContent, submittedKeys, newEntries)
+            
+            // 6. 调用阿里 Code API 提交文件
+            val apiUrl = "$baseApiUrl/projects/$projectId/repository/files"
+            
+            logger.info("API URL: $apiUrl")
+            logger.info("操作类型: ${if (isCreate) "创建" else "更新"}")
+            logger.info("变更统计: 新增=$added, 更新=$updated, 跳过=$skipped")
+            
+            val connection = URI(apiUrl).toURL().openConnection() as HttpURLConnection
+            connection.requestMethod = if (isCreate) "POST" else "PUT"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            connection.setRequestProperty("Private-Token", token)
+            
+            // 构建请求体 - 阿里 Code API 格式
+            val base64Content = Base64.getEncoder().encodeToString(finalContent.toByteArray(StandardCharsets.UTF_8))
+            val escapedPath = filePath.replace("\"", "\\\"")
+            val escapedMessage = commitMessage.replace("\"", "\\\"")
+            val requestBody = """
+                {
+                    "file_path": "$escapedPath",
+                    "branch_name": "$branch",
+                    "content": "$base64Content",
+                    "encoding": "base64",
+                    "commit_message": "$escapedMessage"
+                }
+            """.trimIndent()
+            
+            logger.info("请求体: $requestBody")
+            
+            connection.outputStream.use { os ->
+                OutputStreamWriter(os, StandardCharsets.UTF_8).use { writer ->
+                    writer.write(requestBody)
+                    writer.flush()
+                }
+            }
+            
+            val responseCode = connection.responseCode
+            val responseMessage = try {
+                if (responseCode in 200..299) {
+                    connection.inputStream.bufferedReader().readText()
+                } else {
+                    connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
+                }
+            } catch (e: Exception) {
+                e.message ?: "Unknown error"
+            }
+            
+            logger.info("响应码: $responseCode")
+            logger.info("响应: $responseMessage")
+            
+            if (responseCode in 200..299) {
+                val resultMsg = buildString {
+                    append("提交成功")
+                    if (added > 0) append("，新增 $added 条")
+                    if (updated > 0) append("，更新 $updated 条")
+                    if (skipped > 0) append("，跳过 $skipped 条（已存在）")
+                }
+                Result.success(resultMsg)
+            } else {
+                Result.failure(Exception("提交失败 ($responseCode): $responseMessage"))
+            }
+        } catch (e: Exception) {
+            logger.error("API 提交文件失败", e)
+            Result.failure(Exception("提交失败: ${e.message}"))
+        }
+    }
+    
+    /**
+     * 解析 properties 文件内容为 Map
+     * 格式: key = value 或 key=value
+     * key 和 value 都进行 trim，用于比较
+     */
+    private fun parsePropertiesContent(content: String): Map<String, String> {
+        val entries = mutableMapOf<String, String>()
+        
+        content.lines().forEach { line ->
+            val trimmedLine = line.trim()
+            // 跳过空行和注释
+            if (trimmedLine.isEmpty() || trimmedLine.startsWith("#") || trimmedLine.startsWith("!")) {
+                return@forEach
+            }
+            
+            // 解析 key=value 或 key = value
+            val separatorIndex = line.indexOfFirst { it == '=' || it == ':' }
+            if (separatorIndex > 0) {
+                val key = line.substring(0, separatorIndex).trim()
+                val value = line.substring(separatorIndex + 1).trim()
+                entries[key] = value
+            }
+        }
+        
+        return entries
+    }
+    
+    /**
+     * 重建 properties 文件内容
+     * 只更新本次提交的 key，其他行完全保持不变
+     * 不保留空行
+     * 
+     * @param originalContent 原文件内容
+     * @param submittedKeys 本次提交的 key 集合（只有这些 key 会被更新）
+     * @param submittedEntries 本次提交的 key-value
+     */
+    private fun rebuildPropertiesContent(
+        originalContent: String,
+        submittedKeys: Set<String>,
+        submittedEntries: Map<String, String>
+    ): String {
+        val resultLines = mutableListOf<String>()
+        val processedKeys = mutableSetOf<String>()
+        
+        // 处理原有的行，保持顺序
+        originalContent.lines().forEach { line ->
+            val trimmedLine = line.trim()
+            
+            // 跳过空行（不保留空行）
+            if (trimmedLine.isEmpty()) {
+                return@forEach
+            }
+            
+            // 保留注释（保持原格式）
+            if (trimmedLine.startsWith("#") || trimmedLine.startsWith("!")) {
+                resultLines.add(line)
+                return@forEach
+            }
+            
+            // 解析 key（在原始行中查找分隔符）
+            val separatorIndex = line.indexOfFirst { it == '=' || it == ':' }
+            if (separatorIndex > 0) {
+                val key = line.substring(0, separatorIndex).trim()
+                processedKeys.add(key)
+                
+                // 只有本次提交的 key 才会被更新，其他保持原样
+                if (submittedKeys.contains(key)) {
+                    // 这个 key 在本次提交中，用新值替换
+                    val newValue = submittedEntries[key]
+                    if (newValue != null) {
+                        val prefix = line.substring(0, separatorIndex + 1)
+                        val hasSpaceAfterSeparator = separatorIndex + 1 < line.length && line[separatorIndex + 1] == ' '
+                        val space = if (hasSpaceAfterSeparator) " " else ""
+                        resultLines.add("$prefix$space$newValue")
+                    } else {
+                        resultLines.add(line)
+                    }
+                } else {
+                    // 不在本次提交中，保持原有行完全不变
+                    resultLines.add(line)
+                }
+            } else {
+                // 非 key=value 格式的行，保持原样
+                resultLines.add(line)
+            }
+        }
+        
+        // 追加新增的 key（原文件中不存在的）
+        submittedEntries.forEach { (key, value) ->
+            if (!processedKeys.contains(key)) {
+                resultLines.add("$key = $value")
+            }
+        }
+        
+        // 用换行符连接所有行，末尾添加换行符（确保下次添加新行时不会修改原有最后一行）
+        return resultLines.joinToString("\n") + "\n"
+    }
+    
+    /**
+     * 通过 API 获取文件内容
+     */
+    private fun getFileContentViaApi(baseUrl: String, projectId: String, branch: String, encodedPath: String, token: String): String? {
+        return try {
+            val apiUrl = "$baseUrl/projects/$projectId/repository/files?file_path=$encodedPath&ref=$branch"
+            logger.info("获取文件: $apiUrl")
+            
+            val connection = URI(apiUrl).toURL().openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Private-Token", token)
+            
+            val responseCode = connection.responseCode
+            if (responseCode == 200) {
+                val response = connection.inputStream.bufferedReader().readText()
+                // 解析 JSON 获取 content 字段
+                val contentMatch = Regex(""""content"\s*:\s*"([^"]+)"""").find(response)
+                if (contentMatch != null) {
+                    val base64Content = contentMatch.groupValues[1]
+                    String(Base64.getDecoder().decode(base64Content), StandardCharsets.UTF_8)
+                } else {
+                    null
+                }
+            } else {
+                logger.info("文件不存在或获取失败: $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            logger.warn("获取文件内容失败", e)
+            null
+        }
+    }
+    
+    companion object {
+        fun getInstance(project: Project): CodePlatformService {
+            return project.service<CodePlatformService>()
+        }
+    }
+}

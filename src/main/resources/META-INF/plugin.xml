@@ -31,7 +31,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <!-- 工具窗口 -->
         <toolWindow 
-            factoryClass="org.jetbrains.plugins.template.toolWindow.KiwiToolWindowFactory" 
+            factoryClass="com.github.chenweichang1.kiwilinteridea.toolWindow.KiwiToolWindowFactory" 
             id="Kiwi-linter"
             anchor="right"
             icon="icons/kiwiLinter.png"/>
@@ -39,13 +39,13 @@
         <!-- 设置页面 -->
         <projectConfigurable 
             parentId="tools"
-            instance="org.jetbrains.plugins.template.ui.KiwiSettingsConfigurable"
-            id="org.jetbrains.plugins.template.settings"
+            instance="com.github.chenweichang1.kiwilinteridea.ui.KiwiSettingsConfigurable"
+            id="com.github.chenweichang1.kiwilinteridea.settings"
             displayName="Kiwi-linter"/>
         
         <!-- Intention Action (灯泡菜单) -->
         <intentionAction>
-            <className>org.jetbrains.plugins.template.intentions.ExtractI18nIntention</className>
+            <className>com.github.chenweichang1.kiwilinteridea.intentions.ExtractI18nIntention</className>
             <category>Kiwi-linter</category>
         </intentionAction>
         
@@ -55,7 +55,7 @@
         <!-- 代码标注器 - 高亮显示可提取的 I18N 模式 -->
         <annotator 
             language="" 
-            implementationClass="org.jetbrains.plugins.template.annotator.I18nPatternAnnotator"/>
+            implementationClass="com.github.chenweichang1.kiwilinteridea.annotator.I18nPatternAnnotator"/>
     </extensions>
 
     <actions>
@@ -64,7 +64,7 @@
             
             <!-- 从选中内容提取 -->
             <action id="KiwiI18n.ExtractAction"
-                    class="org.jetbrains.plugins.template.actions.ExtractI18nAction"
+                    class="com.github.chenweichang1.kiwilinteridea.actions.ExtractI18nAction"
                     text="提取 I18N 文案"
                     description="从选中代码或当前行提取 I18N 文案">
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt I"/>
@@ -72,7 +72,7 @@
             
             <!-- 手动录入（单条） -->
             <action id="KiwiI18n.ManualEntryAction"
-                    class="org.jetbrains.plugins.template.actions.ManualI18nEntryAction"
+                    class="com.github.chenweichang1.kiwilinteridea.actions.ManualI18nEntryAction"
                     text="手动录入 I18N 文案（单条）"
                     description="手动输入单条 I18N 文案">
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift I"/>
@@ -80,7 +80,7 @@
             
             <!-- 批量手动录入 -->
             <action id="KiwiI18n.BatchManualEntryAction"
-                    class="org.jetbrains.plugins.template.actions.BatchManualI18nEntryAction"
+                    class="com.github.chenweichang1.kiwilinteridea.actions.BatchManualI18nEntryAction"
                     text="批量手动录入 I18N 文案"
                     description="批量手动输入多条 I18N 文案，统一提交">
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift B"/>
@@ -88,7 +88,7 @@
             
             <!-- 批量提取 -->
             <action id="KiwiI18n.BatchExtractAction"
-                    class="org.jetbrains.plugins.template.actions.BatchExtractI18nAction"
+                    class="com.github.chenweichang1.kiwilinteridea.actions.BatchExtractI18nAction"
                     text="批量提取文件中的 I18N 文案"
                     description="从当前文件中批量提取所有 I18N 文案"/>
             
@@ -110,7 +110,7 @@
         <!-- 添加到代码生成菜单 (Alt+Insert) -->
         <group id="KiwiI18n.GenerateMenu">
             <action id="KiwiI18n.GenerateExtractAction"
-                    class="org.jetbrains.plugins.template.actions.ExtractI18nAction"
+                    class="com.github.chenweichang1.kiwilinteridea.actions.ExtractI18nAction"
                     text="提取 I18N 文案"/>
             <add-to-group group-id="GenerateGroup" anchor="last"/>
         </group>

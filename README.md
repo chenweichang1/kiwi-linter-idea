@@ -1,141 +1,52 @@
-# Kiwi-linter - IDEA 国际化文案录入插件
+# kiwi-linter-idea
 
-[![Build](https://github.com/JetBrains/intellij-platform-plugin-template/workflows/Build/badge.svg)][gh:build]
+![Build](https://github.com/chenweichang1/kiwi-linter-idea/workflows/Build/badge.svg)
+[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 
-一个用于快速提交 I18N 国际化文案至二方包仓库的 IntelliJ IDEA 插件。
+## Template ToDo list
+- [x] Create a new [IntelliJ Platform Plugin Template][template] project.
+- [ ] Get familiar with the [template documentation][template].
+- [ ] Adjust the [pluginGroup](./gradle.properties) and [pluginName](./gradle.properties), as well as the [id](./src/main/resources/META-INF/plugin.xml) and [sources package](./src/main/kotlin).
+- [ ] Adjust the plugin description in `README` (see [Tips][docs:plugin-description])
+- [ ] Review the [Legal Agreements](https://plugins.jetbrains.com/docs/marketplace/legal-agreements.html?from=IJPluginTemplate).
+- [ ] [Publish a plugin manually](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate) for the first time.
+- [ ] Set the `MARKETPLACE_ID` in the above README badges. You can obtain it once the plugin is published to JetBrains Marketplace.
+- [ ] Set the [Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html?from=IJPluginTemplate) related [secrets](https://github.com/JetBrains/intellij-platform-plugin-template#environment-variables).
+- [ ] Set the [Deployment Token](https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html?from=IJPluginTemplate).
+- [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
+- [ ] Configure the [CODECOV_TOKEN](https://docs.codecov.com/docs/quick-start) secret for automated test coverage reports on PRs
 
 <!-- Plugin description -->
+This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
 
-**Kiwi-linter** is a powerful IntelliJ IDEA plugin for managing I18N internationalization entries.
+This specific section is a source for the [plugin.xml](/src/main/resources/META-INF/plugin.xml) file which will be extracted by the [Gradle](/build.gradle.kts) during the build process.
 
-### Features
-
-- **Auto Extract**: Automatically detect ErrorCode enum patterns and extract key-value pairs
-- **Manual Entry**: Manually input key-value pairs for database-stored keys
-- **Batch Extract**: Extract all I18N entries from current file at once
-- **One-click Push**: Directly commit to remote properties repository
-
-### Usage
-
-- Right-click menu -> Kiwi-linter -> Extract / Manual Entry
-- Alt+Enter intention menu -> Extract I18N to repository
-- Tools menu -> Kiwi-linter
-
+To keep everything working, do not remove `<!-- ... -->` sections. 
 <!-- Plugin description end -->
 
-## 使用方式
+## Installation
 
-### 方式一：右键菜单
+- Using the IDE built-in plugin system:
 
-1. 选中包含 ErrorCode 定义的代码
-2. 右键 -> `Kiwi-linter` -> `提取 I18N 文案`
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "kiwi-linter-idea"</kbd> >
+  <kbd>Install</kbd>
 
-### 方式二：灯泡菜单 (Alt+Enter)
+- Using JetBrains Marketplace:
 
-1. 将光标放在 ErrorCode 定义行
-2. 按 `Alt+Enter` 打开灯泡菜单
-3. 选择 `提取 I18N 文案到仓库`
+  Go to [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID) and install it by clicking the <kbd>Install to ...</kbd> button in case your IDE is running.
 
-### 方式三：快捷键
+  You can also download the [latest release](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID/versions) from JetBrains Marketplace and install it manually using
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
-- `Ctrl+Alt+I` - 提取 I18N 文案
-- `Ctrl+Alt+Shift+I` - 手动录入 I18N 文案
+- Manually:
 
-### 方式四：工具窗口
+  Download the [latest release](https://github.com/chenweichang1/kiwi-linter-idea/releases/latest) and install it manually using
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
-- 打开右侧 `Kiwi-linter` 工具窗口
-- 直接在表单中输入 key 和 value
 
-## 配置
+---
+Plugin based on the [IntelliJ Platform Plugin Template][template].
 
-进入 `Settings/Preferences` -> `Tools` -> `Kiwi-linter` 进行配置：
-
-| 配置项          | 说明               | 示例                                                  |
-| --------------- | ------------------ | ----------------------------------------------------- |
-| 仓库路径        | 二方包仓库的路径   | `group/i18n-repo`                                     |
-| 目标分支        | 提交的目标分支     | `master`                                              |
-| Properties 路径 | 中文文案文件路径   | `src/main/resources/dataphin_i18n_data_zh.properties` |
-| 提交信息模板    | Git 提交信息模板   | `feat: 添加 I18N 文案 - {key}`                        |
-| 自动推送        | 提交后是否自动推送 | 开启/关闭                                             |
-
-## 支持的代码模式
-
-### ErrorCode 枚举模式
-
-```java
-public enum PublicCalendarErrorCode implements Errors {
-    // 根据id找不到公共日历
-    CALENDAR_NOT_FOUND("DPN.DataProcess.CalendarNotFound", "根据id或者编码:{0} 找不到公共日历", ErrorLevel.LOGIC),
-
-    // 根据id找不到标签
-    TAG_NOT_FOUND("DPN.DataProcess.TagNotFound", "根据id或者编码:{0} 找不到标签", ErrorLevel.LOGIC),
-}
-```
-
-提取结果：
-
-```properties
-DPN.DataProcess.CalendarNotFound = 根据id或者编码:{0} 找不到公共日历
-DPN.DataProcess.TagNotFound = 根据id或者编码:{0} 找不到标签
-```
-
-## 项目结构
-
-```
-src/main/kotlin/org/jetbrains/plugins/template/
-├── i18n/
-│   ├── I18nEntry.kt           # I18N 条目数据类
-│   └── I18nExtractor.kt       # 文案提取器
-├── actions/
-│   ├── ExtractI18nAction.kt      # 提取文案 Action
-│   ├── ManualI18nEntryAction.kt  # 手动录入 Action
-│   └── BatchExtractI18nAction.kt # 批量提取 Action
-├── intentions/
-│   └── ExtractI18nIntention.kt   # 灯泡菜单 Intention
-├── annotator/
-│   └── I18nPatternAnnotator.kt   # 代码标注器
-├── services/
-│   ├── I18nSubmitService.kt      # 文案提交服务
-│   └── CodePlatformService.kt    # Code 平台服务
-├── settings/
-│   └── KiwiSettings.kt           # 插件设置
-├── ui/
-│   ├── I18nEntryDialog.kt        # 文案录入对话框
-│   ├── BatchI18nDialog.kt        # 批量选择对话框
-│   ├── KiwiSettingsConfigurable.kt # 设置页面
-│   └── KiwiToolWindowPanel.kt    # 工具窗口面板
-└── toolWindow/
-    └── KiwiToolWindowFactory.kt  # 工具窗口工厂
-```
-
-## 开发
-
-### 环境要求
-
-- JDK 21+
-- Gradle 9.2+
-- IntelliJ IDEA 2024.2+（Build 242+）
-
-### 构建
-
-```bash
-./gradlew build
-```
-
-### 运行插件
-
-```bash
-./gradlew runIde
-```
-
-### 测试
-
-```bash
-./gradlew test
-```
-
-## License
-
-MIT License
-
-[gh:build]: https://github.com/JetBrains/intellij-platform-plugin-template/actions?query=workflow%3ABuild
+[template]: https://github.com/JetBrains/intellij-platform-plugin-template
+[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
