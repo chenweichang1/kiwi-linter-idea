@@ -70,15 +70,7 @@
                 <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt I"/>
             </action>
             
-            <!-- 手动录入（单条） -->
-            <action id="KiwiI18n.ManualEntryAction"
-                    class="com.github.chenweichang1.kiwilinteridea.actions.ManualI18nEntryAction"
-                    text="手动录入 I18N 文案（单条）"
-                    description="手动输入单条 I18N 文案">
-                <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt shift I"/>
-            </action>
-            
-            <!-- 批量手动录入 -->
+            <!-- 打开文案管理窗口 -->
             <action id="KiwiI18n.BatchManualEntryAction"
                     class="com.github.chenweichang1.kiwilinteridea.actions.BatchManualI18nEntryAction"
                     text="批量手动录入 I18N 文案"

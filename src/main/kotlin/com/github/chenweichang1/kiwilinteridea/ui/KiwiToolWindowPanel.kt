@@ -19,7 +19,7 @@ import javax.swing.table.DefaultTableModel
 
 /**
  * Kiwi-linter 工具窗口面板
- * 核心功能：批量录入表格 + 统一上传
+ * 核心功能：批量录入表格 + 上传
  */
 class KiwiToolWindowPanel(private val project: Project) {
     
@@ -34,7 +34,7 @@ class KiwiToolWindowPanel(private val project: Project) {
         columnModel.getColumn(1).preferredWidth = 300
     }
     
-    private val submitButton = JButton("📤 统一上传").apply {
+    private val submitButton = JButton("📤 上传").apply {
         addActionListener { submitAllEntries() }
     }
     
@@ -45,11 +45,11 @@ class KiwiToolWindowPanel(private val project: Project) {
     private val countLabel = JBLabel("共 0 条待提交")
     
     // 快速添加区域
-    private val quickKeyField = JBTextField(15).apply {
-        emptyText.text = "Key"
+    private val quickKeyField = JBTextField().apply {
+        emptyText.text = "输入 Key，如: DPN.DataProcess.CalendarNotFound"
     }
-    private val quickValueField = JBTextField(20).apply {
-        emptyText.text = "中文文案"
+    private val quickValueField = JBTextField().apply {
+        emptyText.text = "输入中文文案"
     }
     
     // 保存面板引用，用于 loading 时禁用
@@ -59,7 +59,7 @@ class KiwiToolWindowPanel(private val project: Project) {
         mainPanel = JPanel(BorderLayout())
         
         // 顶部提示
-        val tipLabel = JBLabel("📝 所有文案将在一个 commit 中统一提交，减少 commit 次数").apply {
+        val tipLabel = JBLabel("📝 所有文案将在一个 commit 中统一提交").apply {
             border = JBUI.Borders.empty(5, 0, 10, 0)
         }
         
@@ -94,9 +94,9 @@ class KiwiToolWindowPanel(private val project: Project) {
         val settings = KiwiSettings.getInstance(project)
         val statusLabel = JBLabel().apply {
             text = if (settings.state.projectId.isNotBlank()) {
-                "📁 项目 ID: ${settings.state.projectId} | 分支: ${settings.state.targetBranch}"
+                "📁 项目: ${settings.state.projectId} | 分支: ${settings.state.targetBranch}"
             } else {
-                "⚠️ 请先配置项目信息 (Settings -> Tools -> Kiwi-linter)"
+                "⚠️ 请先配置 (Settings -> Tools -> Kiwi-linter)"
             }
             border = JBUI.Borders.emptyTop(5)
         }
@@ -104,7 +104,7 @@ class KiwiToolWindowPanel(private val project: Project) {
         // 顶部区域
         val topPanel = JPanel(BorderLayout()).apply {
             add(tipLabel, BorderLayout.NORTH)
-            add(quickAddPanel, BorderLayout.SOUTH)
+            add(quickAddPanel, BorderLayout.CENTER)
         }
         
         // 底部区域
@@ -124,11 +124,12 @@ class KiwiToolWindowPanel(private val project: Project) {
     }
     
     private fun createQuickAddPanel(): JPanel {
-        val panel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
-            border = JBUI.Borders.empty(5, 0)
+        val panel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            border = JBUI.Borders.empty(0, 0, 10, 0)
         }
         
-        val addButton = JButton("➕ 快速添加").apply {
+        val addButton = JButton("➕ 添加").apply {
             addActionListener {
                 if (quickKeyField.text.isNotBlank() && quickValueField.text.isNotBlank()) {
                     addEntry(I18nEntry(quickKeyField.text.trim(), quickValueField.text.trim()))
@@ -144,13 +145,28 @@ class KiwiToolWindowPanel(private val project: Project) {
             addButton.doClick()
         }
         
-        panel.add(JBLabel("Key:"))
-        panel.add(quickKeyField)
-        panel.add(Box.createHorizontalStrut(5))
-        panel.add(JBLabel("文案:"))
-        panel.add(quickValueField)
-        panel.add(Box.createHorizontalStrut(5))
-        panel.add(addButton)
+        // Key 输入行
+        val keyRow = JPanel(BorderLayout()).apply {
+            add(JBLabel("Key:      "), BorderLayout.WEST)
+            add(quickKeyField, BorderLayout.CENTER)
+        }
+        
+        // 文案输入行
+        val valueRow = JPanel(BorderLayout()).apply {
+            border = JBUI.Borders.emptyTop(5)
+            add(JBLabel("文案:    "), BorderLayout.WEST)
+            add(quickValueField, BorderLayout.CENTER)
+        }
+        
+        // 按钮行
+        val buttonRow = JPanel(FlowLayout(FlowLayout.RIGHT)).apply {
+            border = JBUI.Borders.emptyTop(5)
+            add(addButton)
+        }
+        
+        panel.add(keyRow)
+        panel.add(valueRow)
+        panel.add(buttonRow)
         
         return panel
     }
@@ -283,10 +299,10 @@ class KiwiToolWindowPanel(private val project: Project) {
         table.isEnabled = !loading
         
         if (loading) {
-            submitButton.text = "⏳ 提交中..."
+            submitButton.text = "⏳ 上传中..."
             mainPanel.cursor = Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR)
         } else {
-            submitButton.text = "📤 统一上传"
+            submitButton.text = "📤 上传"
             mainPanel.cursor = Cursor.getDefaultCursor()
         }
     }
