@@ -13,6 +13,9 @@ class KiwiToolWindowFactory : ToolWindowFactory {
     
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = KiwiToolWindowPanel(project)
+        // 注册面板实例，供 Action 调用
+        KiwiToolWindowPanel.registerInstance(project, panel)
+        
         val content = ContentFactory.getInstance().createContent(panel.getContent(), "文案管理", false)
         toolWindow.contentManager.addContent(content)
     }

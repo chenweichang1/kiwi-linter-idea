@@ -1,201 +1,318 @@
 package com.github.chenweichang1.kiwilinteridea.ui
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
-import com.intellij.util.ui.FormBuilder
+import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import com.github.chenweichang1.kiwilinteridea.i18n.I18nEntry
 import com.github.chenweichang1.kiwilinteridea.services.I18nSubmitService
 import com.github.chenweichang1.kiwilinteridea.settings.KiwiSettings
 import java.awt.BorderLayout
+import java.awt.Cursor
 import java.awt.FlowLayout
 import javax.swing.*
+import javax.swing.table.DefaultTableModel
 
 /**
  * Kiwi-linter 工具窗口面板
+ * 核心功能：批量录入表格 + 统一上传
  */
 class KiwiToolWindowPanel(private val project: Project) {
     
-    private val keyField = JBTextField(30).apply {
-        emptyText.text = "输入 Key，如: DPN.DataProcess.CalendarNotFound"
+    private val tableModel = object : DefaultTableModel(arrayOf("Key", "中文文案"), 0) {
+        override fun isCellEditable(row: Int, column: Int): Boolean = true
     }
     
-    private val valueArea = JBTextArea(3, 30).apply {
-        lineWrap = true
-        wrapStyleWord = true
+    private val table = JBTable(tableModel).apply {
+        setShowGrid(true)
+        rowHeight = 28
+        columnModel.getColumn(0).preferredWidth = 200
+        columnModel.getColumn(1).preferredWidth = 300
     }
     
-    private val historyArea = JBTextArea(10, 30).apply {
-        isEditable = false
-        lineWrap = true
-        wrapStyleWord = true
+    private val submitButton = JButton("📤 统一上传").apply {
+        addActionListener { submitAllEntries() }
     }
     
-    private val submitButton = JButton("提交文案").apply {
-        addActionListener { submitEntry() }
+    private val clearButton = JButton("🗑️ 清空").apply {
+        addActionListener { clearTable() }
     }
     
-    private val batchButton = JButton("批量录入").apply {
-        addActionListener { openBatchDialog() }
+    private val countLabel = JBLabel("共 0 条待提交")
+    
+    // 快速添加区域
+    private val quickKeyField = JBTextField(15).apply {
+        emptyText.text = "Key"
+    }
+    private val quickValueField = JBTextField(20).apply {
+        emptyText.text = "中文文案"
     }
     
-    private val clearButton = JButton("清空").apply {
-        addActionListener { clearFields() }
-    }
+    // 保存面板引用，用于 loading 时禁用
+    private lateinit var mainPanel: JPanel
     
     fun getContent(): JComponent {
-        val mainPanel = JPanel(BorderLayout())
+        mainPanel = JPanel(BorderLayout())
         
-        // 输入区域
-        val inputPanel = createInputPanel()
+        // 顶部提示
+        val tipLabel = JBLabel("📝 所有文案将在一个 commit 中统一提交，减少 commit 次数").apply {
+            border = JBUI.Borders.empty(5, 0, 10, 0)
+        }
+        
+        // 带工具栏的表格
+        val decorator = ToolbarDecorator.createDecorator(table)
+            .setAddAction { 
+                tableModel.addRow(arrayOf("", ""))
+                table.editCellAt(tableModel.rowCount - 1, 0)
+                updateCount()
+            }
+            .setRemoveAction {
+                val selectedRows = table.selectedRows.sortedDescending()
+                selectedRows.forEach { tableModel.removeRow(it) }
+                updateCount()
+            }
+            .disableUpDownActions()
+        
+        val tablePanel = decorator.createPanel()
+        
+        // 快速添加区域
+        val quickAddPanel = createQuickAddPanel()
         
         // 按钮区域
         val buttonPanel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
             add(submitButton)
-            add(batchButton)
             add(clearButton)
-        }
-        
-        // 历史记录区域
-        val historyPanel = JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.emptyTop(10)
-            add(JBLabel("最近提交:"), BorderLayout.NORTH)
-            add(JBScrollPane(historyArea), BorderLayout.CENTER)
+            add(Box.createHorizontalStrut(20))
+            add(countLabel)
         }
         
         // 状态区域
         val settings = KiwiSettings.getInstance(project)
         val statusLabel = JBLabel().apply {
             text = if (settings.state.projectId.isNotBlank()) {
-                "项目 ID: ${settings.state.projectId} | 分支: ${settings.state.targetBranch}"
+                "📁 项目 ID: ${settings.state.projectId} | 分支: ${settings.state.targetBranch}"
             } else {
                 "⚠️ 请先配置项目信息 (Settings -> Tools -> Kiwi-linter)"
             }
+            border = JBUI.Borders.emptyTop(5)
         }
         
+        // 顶部区域
         val topPanel = JPanel(BorderLayout()).apply {
-            add(inputPanel, BorderLayout.CENTER)
-            add(buttonPanel, BorderLayout.SOUTH)
+            add(tipLabel, BorderLayout.NORTH)
+            add(quickAddPanel, BorderLayout.SOUTH)
+        }
+        
+        // 底部区域
+        val bottomPanel = JPanel(BorderLayout()).apply {
+            add(buttonPanel, BorderLayout.CENTER)
+            add(statusLabel, BorderLayout.SOUTH)
         }
         
         mainPanel.apply {
             border = JBUI.Borders.empty(10)
             add(topPanel, BorderLayout.NORTH)
-            add(historyPanel, BorderLayout.CENTER)
-            add(statusLabel, BorderLayout.SOUTH)
+            add(tablePanel, BorderLayout.CENTER)
+            add(bottomPanel, BorderLayout.SOUTH)
         }
         
         return mainPanel
     }
     
-    private fun createInputPanel(): JPanel {
-        val valueScrollPane = JBScrollPane(valueArea).apply {
-            preferredSize = JBUI.size(300, 60)
+    private fun createQuickAddPanel(): JPanel {
+        val panel = JPanel(FlowLayout(FlowLayout.LEFT)).apply {
+            border = JBUI.Borders.empty(5, 0)
         }
         
-        return FormBuilder.createFormBuilder()
-            .addLabeledComponent(JBLabel("Key:"), keyField, 1, false)
-            .addLabeledComponent(JBLabel("中文文案:"), valueScrollPane, 1, false)
-            .panel
-    }
-    
-    private fun submitEntry() {
-        val key = keyField.text.trim()
-        val value = valueArea.text.trim()
-        
-        if (key.isBlank()) {
-            Messages.showWarningDialog(project, "请输入 Key", "提示")
-            return
-        }
-        
-        if (value.isBlank()) {
-            Messages.showWarningDialog(project, "请输入中文文案", "提示")
-            return
-        }
-        
-        val entry = I18nEntry(key, value)
-        val submitService = I18nSubmitService.getInstance(project)
-        
-        when (val result = submitService.submitEntry(entry)) {
-            is I18nSubmitService.SubmitResult.Success -> {
-                // 根据实际变更决定是否添加到历史记录
-                if (result.changedCount > 0) {
-                    val history = historyArea.text
-                    val newHistory = "${entry.toPropertiesLine()}\n$history"
-                    historyArea.text = newHistory
-                    // 清空输入
-                    clearFields()
+        val addButton = JButton("➕ 快速添加").apply {
+            addActionListener {
+                if (quickKeyField.text.isNotBlank() && quickValueField.text.isNotBlank()) {
+                    addEntry(I18nEntry(quickKeyField.text.trim(), quickValueField.text.trim()))
+                    quickKeyField.text = ""
+                    quickValueField.text = ""
+                    quickKeyField.requestFocus()
                 }
-                
-                // 构建提示消息
-                val msg = when {
-                    result.skipped > 0 -> "文案已存在且内容相同，已跳过"
-                    result.updated > 0 -> "文案已更新"
-                    else -> "文案已新增"
-                }
-                val title = if (result.changedCount > 0) "提交成功" else "提交完成"
-                Messages.showInfoMessage(project, msg, title)
-            }
-            is I18nSubmitService.SubmitResult.Failure -> {
-                Messages.showErrorDialog(project, result.error, "提交失败")
             }
         }
-    }
-    
-    private fun clearFields() {
-        keyField.text = ""
-        valueArea.text = ""
-        keyField.requestFocus()
-    }
-    
-    private fun openBatchDialog() {
-        val dialog = BatchManualI18nDialog(project)
         
-        if (dialog.showAndGet()) {
-            val entries = dialog.getEntries()
+        // 支持回车快速添加
+        quickValueField.addActionListener {
+            addButton.doClick()
+        }
+        
+        panel.add(JBLabel("Key:"))
+        panel.add(quickKeyField)
+        panel.add(Box.createHorizontalStrut(5))
+        panel.add(JBLabel("文案:"))
+        panel.add(quickValueField)
+        panel.add(Box.createHorizontalStrut(5))
+        panel.add(addButton)
+        
+        return panel
+    }
+    
+    /**
+     * 添加条目到表格（供外部 Action 调用）
+     */
+    fun addEntry(entry: I18nEntry) {
+        tableModel.addRow(arrayOf(entry.key, entry.value))
+        updateCount()
+    }
+    
+    /**
+     * 批量添加条目到表格（供外部 Action 调用）
+     */
+    fun addEntries(entries: List<I18nEntry>) {
+        entries.forEach { entry ->
+            tableModel.addRow(arrayOf(entry.key, entry.value))
+        }
+        updateCount()
+    }
+    
+    /**
+     * 获取所有有效条目
+     */
+    private fun getEntries(): List<I18nEntry> {
+        // 停止编辑以确保获取最新数据
+        if (table.isEditing) {
+            table.cellEditor?.stopCellEditing()
+        }
+        
+        val entries = mutableListOf<I18nEntry>()
+        for (row in 0 until tableModel.rowCount) {
+            val key = (tableModel.getValueAt(row, 0) as? String)?.trim() ?: ""
+            val value = (tableModel.getValueAt(row, 1) as? String)?.trim() ?: ""
             
-            if (entries.isEmpty()) {
-                Messages.showInfoMessage(project, "没有需要提交的文案", "提示")
+            if (key.isNotBlank() && value.isNotBlank()) {
+                entries.add(I18nEntry(key, value))
+            }
+        }
+        return entries
+    }
+    
+    private fun updateCount() {
+        val count = getEntries().size
+        countLabel.text = "共 $count 条待提交"
+    }
+    
+    private fun clearTable() {
+        tableModel.setRowCount(0)
+        updateCount()
+    }
+    
+    private fun submitAllEntries() {
+        val entries = getEntries()
+        
+        if (entries.isEmpty()) {
+            Messages.showInfoMessage(project, "没有需要提交的文案", "提示")
+            return
+        }
+        
+        // 检查 Key 格式
+        for (entry in entries) {
+            if (!entry.key.matches(Regex("^[\\w.]+$"))) {
+                Messages.showWarningDialog(
+                    project,
+                    "Key '${entry.key}' 格式不正确，只能包含字母、数字、下划线和点",
+                    "格式错误"
+                )
                 return
             }
-            
-            // 批量提交到仓库
+        }
+        
+        // 检查重复 Key
+        val keys = entries.map { it.key }
+        val duplicates = keys.groupBy { it }.filter { it.value.size > 1 }.keys
+        if (duplicates.isNotEmpty()) {
+            Messages.showWarningDialog(
+                project,
+                "存在重复的 Key: ${duplicates.joinToString(", ")}",
+                "重复 Key"
+            )
+            return
+        }
+        
+        // 显示 loading 状态
+        setLoading(true)
+        
+        // 在后台线程执行提交
+        ApplicationManager.getApplication().executeOnPooledThread {
             val submitService = I18nSubmitService.getInstance(project)
-            when (val result = submitService.submitEntries(entries)) {
-                is I18nSubmitService.SubmitResult.Success -> {
-                    // 只有实际变更的条目才添加到历史记录
-                    if (result.changedCount > 0) {
-                        val newEntries = entries.joinToString("\n") { it.toPropertiesLine() }
-                        val history = historyArea.text
-                        historyArea.text = "$newEntries\n$history"
-                    }
-                    
-                    // 构建详细的统计信息
-                    val statsMsg = buildString {
-                        if (result.added > 0) append("新增 ${result.added} 条")
-                        if (result.updated > 0) {
-                            if (isNotEmpty()) append("，")
-                            append("更新 ${result.updated} 条")
+            val result = submitService.submitEntries(entries)
+            
+            // 回到 EDT 更新 UI
+            SwingUtilities.invokeLater {
+                setLoading(false)
+                
+                when (result) {
+                    is I18nSubmitService.SubmitResult.Success -> {
+                        // 构建详细的统计信息
+                        val statsMsg = buildString {
+                            if (result.added > 0) append("✅ 新增 ${result.added} 条\n")
+                            if (result.updated > 0) append("🔄 更新 ${result.updated} 条\n")
+                            if (result.skipped > 0) append("⏭️ 跳过 ${result.skipped} 条（已存在且内容相同）")
+                            if (isEmpty()) append("没有需要变更的内容")
                         }
-                        if (result.skipped > 0) {
-                            if (isNotEmpty()) append("，")
-                            append("跳过 ${result.skipped} 条（已存在且内容相同）")
+                        
+                        val title = if (result.changedCount > 0) "🎉 提交成功" else "提交完成"
+                        Messages.showInfoMessage(project, statsMsg.trim(), title)
+                        
+                        // 提交成功后清空表格
+                        if (result.changedCount > 0) {
+                            clearTable()
                         }
-                        if (isEmpty()) append("没有需要变更的内容")
                     }
-                    
-                    val title = if (result.changedCount > 0) "批量录入成功" else "批量录入完成"
-                    Messages.showInfoMessage(project, statsMsg, title)
-                }
-                is I18nSubmitService.SubmitResult.Failure -> {
-                    Messages.showErrorDialog(project, result.error, "批量录入失败")
+                    is I18nSubmitService.SubmitResult.Failure -> {
+                        Messages.showErrorDialog(project, result.error, "❌ 提交失败")
+                    }
                 }
             }
+        }
+    }
+    
+    /**
+     * 设置 loading 状态
+     */
+    private fun setLoading(loading: Boolean) {
+        submitButton.isEnabled = !loading
+        clearButton.isEnabled = !loading
+        table.isEnabled = !loading
+        
+        if (loading) {
+            submitButton.text = "⏳ 提交中..."
+            mainPanel.cursor = Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR)
+        } else {
+            submitButton.text = "📤 统一上传"
+            mainPanel.cursor = Cursor.getDefaultCursor()
+        }
+    }
+    
+    companion object {
+        private val instances = mutableMapOf<Project, KiwiToolWindowPanel>()
+        
+        /**
+         * 获取项目对应的工具窗口面板实例
+         */
+        fun getInstance(project: Project): KiwiToolWindowPanel? {
+            return instances[project]
+        }
+        
+        /**
+         * 注册实例（由 ToolWindowFactory 调用）
+         */
+        fun registerInstance(project: Project, panel: KiwiToolWindowPanel) {
+            instances[project] = panel
+        }
+        
+        /**
+         * 移除实例
+         */
+        fun removeInstance(project: Project) {
+            instances.remove(project)
         }
     }
 }
-

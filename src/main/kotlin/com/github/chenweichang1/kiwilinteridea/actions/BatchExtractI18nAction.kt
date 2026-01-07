@@ -4,20 +4,20 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.ui.Messages
-import com.github.chenweichang1.kiwilinteridea.i18n.I18nEntry
+import com.intellij.openapi.wm.ToolWindowManager
 import com.github.chenweichang1.kiwilinteridea.i18n.I18nExtractor
-import com.github.chenweichang1.kiwilinteridea.services.I18nSubmitService
 import com.github.chenweichang1.kiwilinteridea.ui.BatchI18nDialog
+import com.github.chenweichang1.kiwilinteridea.ui.KiwiToolWindowPanel
 
 /**
  * 从当前文件批量提取 I18N 文案的 Action
+ * 提取后添加到工具窗口的表格中，统一提交
  */
 class BatchExtractI18nAction : AnAction() {
     
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
-        val psiFile = e.getData(CommonDataKeys.PSI_FILE) ?: return
         
         // 从文件内容提取所有 I18N 条目
         val fileContent = editor.document.text
@@ -43,34 +43,26 @@ class BatchExtractI18nAction : AnAction() {
                 return
             }
             
-            // 批量提交
-            val submitService = I18nSubmitService.getInstance(project)
-            when (val result = submitService.submitEntries(selectedEntries)) {
-                is I18nSubmitService.SubmitResult.Success -> {
-                    // 构建详细的统计信息
-                    val statsMsg = buildString {
-                        if (result.added > 0) append("新增 ${result.added} 条")
-                        if (result.updated > 0) {
-                            if (isNotEmpty()) append("，")
-                            append("更新 ${result.updated} 条")
-                        }
-                        if (result.skipped > 0) {
-                            if (isNotEmpty()) append("，")
-                            append("跳过 ${result.skipped} 条（已存在且内容相同）")
-                        }
-                        if (isEmpty()) append("没有需要变更的内容")
-                    }
-                    
-                    val title = if (result.changedCount > 0) "批量录入成功" else "批量录入完成"
-                    Messages.showInfoMessage(project, statsMsg, title)
-                }
-                is I18nSubmitService.SubmitResult.Failure -> {
-                    Messages.showErrorDialog(
-                        project,
-                        result.error,
-                        "批量录入失败"
-                    )
-                }
+            // 获取工具窗口面板，添加到表格
+            val panel = KiwiToolWindowPanel.getInstance(project)
+            if (panel != null) {
+                panel.addEntries(selectedEntries)
+                
+                // 打开工具窗口
+                val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("Kiwi-linter")
+                toolWindow?.show()
+                
+                Messages.showInfoMessage(
+                    project,
+                    "已添加 ${selectedEntries.size} 条到待提交列表\n\n请在右侧工具窗口点击「统一上传」提交",
+                    "✅ 添加成功"
+                )
+            } else {
+                Messages.showWarningDialog(
+                    project,
+                    "请先打开 Kiwi-linter 工具窗口",
+                    "提示"
+                )
             }
         }
     }
@@ -81,4 +73,3 @@ class BatchExtractI18nAction : AnAction() {
         e.presentation.isEnabledAndVisible = project != null && editor != null
     }
 }
-
