@@ -47,11 +47,22 @@ class BatchExtractI18nAction : AnAction() {
             val submitService = I18nSubmitService.getInstance(project)
             when (val result = submitService.submitEntries(selectedEntries)) {
                 is I18nSubmitService.SubmitResult.Success -> {
-                    Messages.showInfoMessage(
-                        project,
-                        "成功录入 ${selectedEntries.size} 条文案！",
-                        "批量录入成功"
-                    )
+                    // 构建详细的统计信息
+                    val statsMsg = buildString {
+                        if (result.added > 0) append("新增 ${result.added} 条")
+                        if (result.updated > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("更新 ${result.updated} 条")
+                        }
+                        if (result.skipped > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("跳过 ${result.skipped} 条（已存在且内容相同）")
+                        }
+                        if (isEmpty()) append("没有需要变更的内容")
+                    }
+                    
+                    val title = if (result.changedCount > 0) "批量录入成功" else "批量录入完成"
+                    Messages.showInfoMessage(project, statsMsg, title)
                 }
                 is I18nSubmitService.SubmitResult.Failure -> {
                     Messages.showErrorDialog(

@@ -49,11 +49,12 @@ class ExtractI18nAction : AnAction() {
             val submitService = I18nSubmitService.getInstance(project)
             when (val result = submitService.submitEntry(finalEntry)) {
                 is I18nSubmitService.SubmitResult.Success -> {
-                    Messages.showInfoMessage(
-                        project,
-                        "文案已成功录入！\n\nKey: ${finalEntry.key}\nValue: ${finalEntry.value}",
-                        "录入成功"
-                    )
+                    val (msg, title) = when {
+                        result.skipped > 0 -> "文案已存在且内容相同，已跳过\n\nKey: ${finalEntry.key}" to "录入完成"
+                        result.updated > 0 -> "文案已更新！\n\nKey: ${finalEntry.key}\nValue: ${finalEntry.value}" to "录入成功"
+                        else -> "文案已新增！\n\nKey: ${finalEntry.key}\nValue: ${finalEntry.value}" to "录入成功"
+                    }
+                    Messages.showInfoMessage(project, msg, title)
                 }
                 is I18nSubmitService.SubmitResult.Failure -> {
                     Messages.showErrorDialog(

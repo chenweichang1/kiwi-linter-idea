@@ -28,10 +28,14 @@ class CodePlatformService(private val project: Project) {
         val updated: Int,    // 更新数量
         val skipped: Int,    // 跳过数量（已存在且内容相同）
         val message: String
-    )
+    ) {
+        /** 实际发生变更的数量 */
+        val changedCount: Int get() = added + updated
+    }
     
     /**
      * 提交文件更改到仓库
+     * @return CommitResult 包含新增、更新、跳过的数量统计
      */
     fun commitFile(
         repoPath: String,
@@ -40,7 +44,7 @@ class CodePlatformService(private val project: Project) {
         content: String,
         commitMessage: String,
         append: Boolean = true
-    ): Result<String> {
+    ): Result<CommitResult> {
         val settings = KiwiSettings.getInstance(project)
         
         logger.info("开始提交文件到 Code 平台")
@@ -58,7 +62,7 @@ class CodePlatformService(private val project: Project) {
         filePath: String,
         content: String,
         commitMessage: String
-    ): Result<String> {
+    ): Result<CommitResult> {
         return try {
             val settings = KiwiSettings.getInstance(project)
             val token = settings.state.privateToken
@@ -120,9 +124,14 @@ class CodePlatformService(private val project: Project) {
                 }
             }
             
-            // 如果没有任何变更，直接返回成功
+            // 如果没有任何变更，直接返回成功（不执行提交）
             if (added == 0 && updated == 0) {
-                return Result.success("没有需要提交的变更（${skipped}条文案已存在且内容相同）")
+                return Result.success(CommitResult(
+                    added = 0,
+                    updated = 0,
+                    skipped = skipped,
+                    message = "没有需要提交的变更（${skipped}条文案已存在且内容相同）"
+                ))
             }
             
             // 5. 重建文件内容（保持原有顺序，只更新本次提交的 key，新增的追加到末尾）
@@ -186,7 +195,12 @@ class CodePlatformService(private val project: Project) {
                     if (updated > 0) append("，更新 $updated 条")
                     if (skipped > 0) append("，跳过 $skipped 条（已存在）")
                 }
-                Result.success(resultMsg)
+                Result.success(CommitResult(
+                    added = added,
+                    updated = updated,
+                    skipped = skipped,
+                    message = resultMsg
+                ))
             } else {
                 Result.failure(Exception("提交失败 ($responseCode): $responseMessage"))
             }

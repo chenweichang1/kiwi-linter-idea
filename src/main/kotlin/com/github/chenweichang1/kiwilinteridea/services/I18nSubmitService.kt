@@ -22,7 +22,17 @@ class I18nSubmitService(private val project: Project) {
      * 提交结果
      */
     sealed class SubmitResult {
-        data class Success(val message: String) : SubmitResult()
+        data class Success(
+            val message: String,
+            val added: Int = 0,      // 新增数量
+            val updated: Int = 0,    // 更新数量
+            val skipped: Int = 0     // 跳过数量（已存在且内容相同）
+        ) : SubmitResult() {
+            /** 实际发生变更的数量 */
+            val changedCount: Int get() = added + updated
+            /** 总处理数量 */
+            val totalCount: Int get() = added + updated + skipped
+        }
         data class Failure(val error: String) : SubmitResult()
     }
     
@@ -56,9 +66,20 @@ class I18nSubmitService(private val project: Project) {
             )
             
             result.fold(
-                onSuccess = { 
-                    showNotification("I18N 文案录入成功", "Key: ${entry.key}", NotificationType.INFORMATION)
-                    SubmitResult.Success("文案已成功提交到仓库") 
+                onSuccess = { commitResult ->
+                    val notifyMsg = when {
+                        commitResult.skipped > 0 && commitResult.changedCount == 0 -> 
+                            "Key: ${entry.key} 已存在且内容相同，已跳过"
+                        commitResult.updated > 0 -> "Key: ${entry.key} 已更新"
+                        else -> "Key: ${entry.key} 已新增"
+                    }
+                    showNotification("I18N 文案录入", notifyMsg, NotificationType.INFORMATION)
+                    SubmitResult.Success(
+                        message = commitResult.message,
+                        added = commitResult.added,
+                        updated = commitResult.updated,
+                        skipped = commitResult.skipped
+                    )
                 },
                 onFailure = { 
                     showNotification("I18N 文案录入失败", it.message ?: "未知错误", NotificationType.ERROR)
@@ -103,9 +124,27 @@ class I18nSubmitService(private val project: Project) {
             )
             
             result.fold(
-                onSuccess = { 
-                    showNotification("批量录入成功", "成功录入 ${entries.size} 条文案", NotificationType.INFORMATION)
-                    SubmitResult.Success("成功提交 ${entries.size} 条文案") 
+                onSuccess = { commitResult ->
+                    // 构建通知消息，显示实际变更情况
+                    val notifyMsg = buildString {
+                        if (commitResult.added > 0) append("新增 ${commitResult.added} 条")
+                        if (commitResult.updated > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("更新 ${commitResult.updated} 条")
+                        }
+                        if (commitResult.skipped > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("跳过 ${commitResult.skipped} 条（已存在）")
+                        }
+                        if (isEmpty()) append("没有需要变更的内容")
+                    }
+                    showNotification("批量录入完成", notifyMsg, NotificationType.INFORMATION)
+                    SubmitResult.Success(
+                        message = commitResult.message,
+                        added = commitResult.added,
+                        updated = commitResult.updated,
+                        skipped = commitResult.skipped
+                    )
                 },
                 onFailure = { 
                     showNotification("批量录入失败", it.message ?: "未知错误", NotificationType.ERROR)

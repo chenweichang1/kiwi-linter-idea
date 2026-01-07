@@ -122,15 +122,23 @@ class KiwiToolWindowPanel(private val project: Project) {
         
         when (val result = submitService.submitEntry(entry)) {
             is I18nSubmitService.SubmitResult.Success -> {
-                // 添加到历史记录
-                val history = historyArea.text
-                val newHistory = "${entry.toPropertiesLine()}\n$history"
-                historyArea.text = newHistory
+                // 根据实际变更决定是否添加到历史记录
+                if (result.changedCount > 0) {
+                    val history = historyArea.text
+                    val newHistory = "${entry.toPropertiesLine()}\n$history"
+                    historyArea.text = newHistory
+                    // 清空输入
+                    clearFields()
+                }
                 
-                // 清空输入
-                clearFields()
-                
-                Messages.showInfoMessage(project, result.message, "提交成功")
+                // 构建提示消息
+                val msg = when {
+                    result.skipped > 0 -> "文案已存在且内容相同，已跳过"
+                    result.updated > 0 -> "文案已更新"
+                    else -> "文案已新增"
+                }
+                val title = if (result.changedCount > 0) "提交成功" else "提交完成"
+                Messages.showInfoMessage(project, msg, title)
             }
             is I18nSubmitService.SubmitResult.Failure -> {
                 Messages.showErrorDialog(project, result.error, "提交失败")
@@ -159,16 +167,29 @@ class KiwiToolWindowPanel(private val project: Project) {
             val submitService = I18nSubmitService.getInstance(project)
             when (val result = submitService.submitEntries(entries)) {
                 is I18nSubmitService.SubmitResult.Success -> {
-                    // 添加到历史记录
-                    val newEntries = entries.joinToString("\n") { it.toPropertiesLine() }
-                    val history = historyArea.text
-                    historyArea.text = "$newEntries\n$history"
+                    // 只有实际变更的条目才添加到历史记录
+                    if (result.changedCount > 0) {
+                        val newEntries = entries.joinToString("\n") { it.toPropertiesLine() }
+                        val history = historyArea.text
+                        historyArea.text = "$newEntries\n$history"
+                    }
                     
-                    Messages.showInfoMessage(
-                        project,
-                        "成功录入 ${entries.size} 条文案！",
-                        "批量录入成功"
-                    )
+                    // 构建详细的统计信息
+                    val statsMsg = buildString {
+                        if (result.added > 0) append("新增 ${result.added} 条")
+                        if (result.updated > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("更新 ${result.updated} 条")
+                        }
+                        if (result.skipped > 0) {
+                            if (isNotEmpty()) append("，")
+                            append("跳过 ${result.skipped} 条（已存在且内容相同）")
+                        }
+                        if (isEmpty()) append("没有需要变更的内容")
+                    }
+                    
+                    val title = if (result.changedCount > 0) "批量录入成功" else "批量录入完成"
+                    Messages.showInfoMessage(project, statsMsg, title)
                 }
                 is I18nSubmitService.SubmitResult.Failure -> {
                     Messages.showErrorDialog(project, result.error, "批量录入失败")
